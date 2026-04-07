@@ -2,7 +2,7 @@ from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
-    database_url: str = "postgresql+asyncpg://loosebricks:loosebricks@localhost:5432/loosebricks"
+    database_url: str = "postgresql+asyncpg://loosebricks:loosebricks@localhost:5433/loosebricks"
     jwt_secret_key: str = "change-me-in-production"
     jwt_access_token_expire_minutes: int = 15
     jwt_refresh_token_expire_days: int = 30
