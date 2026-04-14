@@ -4,6 +4,7 @@ import io
 
 import httpx
 from sqlalchemy import delete
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.catalog.models import Color, Moc, MocPart, Part, Set, SetPart
@@ -49,31 +50,55 @@ class RebrickableSync:
             if row["version"] == "1":
                 inv_to_set[row["id"]] = row["set_num"]
 
-        # Clear existing data (respect FK order)
+        # Clear catalog-only tables (no user data references these)
         await self.db.execute(delete(MocPart))
         await self.db.execute(delete(Moc))
         await self.db.execute(delete(SetPart))
         await self.db.execute(delete(Set))
-        await self.db.execute(delete(Part))
-        await self.db.execute(delete(Color))
-
-        # Insert colors
-        for row in colors_rows:
-            self.db.add(Color(
-                id=int(row["id"]),
-                name=row["name"],
-                rgb=row["rgb"],
-                is_trans=row["is_trans"].lower() in ("t", "true", "1"),
-            ))
         await self.db.flush()
 
-        # Insert parts
-        for row in parts_rows:
-            self.db.add(Part(
-                part_num=row["part_num"],
-                name=row["name"],
-                category_id=int(row["part_cat_id"]),
-            ))
+        # Upsert colors (collection_pieces has FK to colors)
+        color_values = [
+            {
+                "id": int(row["id"]),
+                "name": row["name"],
+                "rgb": row["rgb"],
+                "is_trans": row["is_trans"].lower() in ("t", "true", "1"),
+            }
+            for row in colors_rows
+        ]
+        if color_values:
+            stmt = pg_insert(Color).values(color_values)
+            stmt = stmt.on_conflict_do_update(
+                index_elements=[Color.id],
+                set_={
+                    "name": stmt.excluded.name,
+                    "rgb": stmt.excluded.rgb,
+                    "is_trans": stmt.excluded.is_trans,
+                },
+            )
+            await self.db.execute(stmt)
+        await self.db.flush()
+
+        # Upsert parts (collection_pieces and scan_results have FK to parts)
+        part_values = [
+            {
+                "part_num": row["part_num"],
+                "name": row["name"],
+                "category_id": int(row["part_cat_id"]),
+            }
+            for row in parts_rows
+        ]
+        if part_values:
+            stmt = pg_insert(Part).values(part_values)
+            stmt = stmt.on_conflict_do_update(
+                index_elements=[Part.part_num],
+                set_={
+                    "name": stmt.excluded.name,
+                    "category_id": stmt.excluded.category_id,
+                },
+            )
+            await self.db.execute(stmt)
         await self.db.flush()
 
         # Insert sets

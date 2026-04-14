@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class CollectionCreate(BaseModel):
@@ -32,11 +32,11 @@ class MergeRequest(BaseModel):
 class PieceCreate(BaseModel):
     part_num: str
     color_id: int
-    quantity: int
+    quantity: int = Field(ge=1)
 
 
 class PieceUpdate(BaseModel):
-    quantity: int
+    quantity: int = Field(ge=1)
 
 
 class PieceResponse(BaseModel):

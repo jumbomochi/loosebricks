@@ -219,3 +219,48 @@ async def test_build_details_with_missing_pieces(
     assert missing_parts["3010"]["have"] == 0
 
     assert len(data["have"]) == 0
+
+
+@pytest.mark.asyncio
+async def test_suggest_rejects_other_users_collections(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    make_user,
+    auth_headers,
+):
+    """A user cannot query builds using another user's collection — expect 404."""
+    owner = await make_user(apple_sub="owner-sub", email="owner@example.com")
+    attacker = await make_user(apple_sub="attacker-sub", email="attacker@example.com")
+
+    seeded = await _seed_builds_data(db_session, owner.id)
+    collection_id = seeded["collection_id"]
+
+    # Attacker uses their own valid JWT but passes the owner's collection id
+    headers = auth_headers(attacker.id)
+    resp = await client.get(
+        f"/builds/suggest?collection_ids={collection_id}&min_completeness=0",
+        headers=headers,
+    )
+    assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_build_details_rejects_other_users_collections(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    make_user,
+    auth_headers,
+):
+    """A user cannot fetch build details using another user's collection — expect 404."""
+    owner = await make_user(apple_sub="owner2-sub", email="owner2@example.com")
+    attacker = await make_user(apple_sub="attacker2-sub", email="attacker2@example.com")
+
+    seeded = await _seed_builds_data(db_session, owner.id)
+    collection_id = seeded["collection_id"]
+
+    headers = auth_headers(attacker.id)
+    resp = await client.get(
+        f"/builds/10001-1/details?collection_ids={collection_id}",
+        headers=headers,
+    )
+    assert resp.status_code == 404

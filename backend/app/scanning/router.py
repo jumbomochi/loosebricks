@@ -247,8 +247,8 @@ async def confirm_scan(
             continue
 
         # Determine the actual part/color to add (use corrections if provided)
-        effective_part = item.corrected_part_num or scan_result.part_num
-        effective_color = item.corrected_color_id or scan_result.color_id
+        effective_part = item.corrected_part_num if item.corrected_part_num is not None else scan_result.part_num
+        effective_color = item.corrected_color_id if item.corrected_color_id is not None else scan_result.color_id
 
         # Upsert into collection_pieces
         cp_result = await db.execute(

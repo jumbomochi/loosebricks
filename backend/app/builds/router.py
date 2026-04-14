@@ -2,11 +2,13 @@ import uuid
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.dependencies import get_current_user
 from app.builds.matching import find_matching_builds, get_build_detail
 from app.builds.schemas import BuildDetailResponse, BuildSuggestResponse
+from app.collections.models import Collection
 from app.database import get_db
 from app.models.user import User
 
@@ -24,6 +26,21 @@ def _parse_collection_ids(collection_ids: str) -> list[uuid.UUID]:
         )
 
 
+async def _verify_collection_ownership(
+    db: AsyncSession,
+    ids: list[uuid.UUID],
+    user: User,
+) -> None:
+    """Raise 404 if any of the given collection IDs don't belong to the user."""
+    count_result = await db.execute(
+        select(func.count()).select_from(Collection).where(
+            Collection.id.in_(ids), Collection.user_id == user.id
+        )
+    )
+    if count_result.scalar() != len(ids):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Collection not found")
+
+
 @router.get("/suggest", response_model=BuildSuggestResponse)
 async def suggest_builds(
     collection_ids: str = Query(..., description="Comma-separated collection UUIDs"),
@@ -37,6 +54,7 @@ async def suggest_builds(
     db: AsyncSession = Depends(get_db),
 ) -> BuildSuggestResponse:
     cids = _parse_collection_ids(collection_ids)
+    await _verify_collection_ownership(db, cids, user)
     suggestions = await find_matching_builds(
         db=db,
         collection_ids=cids,
@@ -58,6 +76,7 @@ async def build_details(
     db: AsyncSession = Depends(get_db),
 ) -> BuildDetailResponse:
     cids = _parse_collection_ids(collection_ids)
+    await _verify_collection_ownership(db, cids, user)
     detail = await get_build_detail(db=db, set_num=set_num, collection_ids=cids)
     if detail is None:
         raise HTTPException(
