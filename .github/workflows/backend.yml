@@ -1,0 +1,52 @@
+name: backend
+
+on:
+  push:
+    paths:
+      - "backend/**"
+      - ".github/workflows/backend.yml"
+  pull_request:
+    paths:
+      - "backend/**"
+      - ".github/workflows/backend.yml"
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: loosebricks
+          POSTGRES_PASSWORD: loosebricks
+          POSTGRES_DB: loosebricks
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U loosebricks"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgresql+asyncpg://loosebricks:loosebricks@localhost:5433/loosebricks
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Create test database
+        run: PGPASSWORD=loosebricks psql -h localhost -p 5433 -U loosebricks -d loosebricks -c "CREATE DATABASE loosebricks_test;"
+
+      - name: Install dependencies
+        run: pip install -e ".[dev]"
+
+      - name: Run tests
+        run: pytest -v
